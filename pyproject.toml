@@ -1,0 +1,19 @@
+[project]
+name = "apple-graph"
+version = "0.1.0"
+description = "Import Apple’s on-device knowledge graph into embedded TuringDB"
+readme = "README.md"
+authors = [
+    { name = "suhassn-turing-bio", email = "suhas.narreddy@turing.bio" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "turingdb>=3.1,<4",
+]
+
+[project.scripts]
+apple-graph = "apple_graph:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
