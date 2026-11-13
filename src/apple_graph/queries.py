@@ -11,12 +11,17 @@ TuringDB visualizer).
     >>> run(db, 'inner_circle')              # returns a pandas DataFrame
     >>> run(db, 'trip', place='Paris')   # keyword arguments fill $parameters
     >>> print(one_line('trip', place='Paris'))   # pasteable into the visualizer
+    >>> print(report(db, 'social_star'))     # a result table, with nodes and paths shown by name
 
 The same is available from the shell with ``apple-graph queries [NAME] [--category C] [--param k=v]``.
 """
 from __future__ import annotations
 
+import numbers
 import re
+import shutil
+import sys
+import unicodedata
 
 QUERIES: dict[str, tuple[str, str]] = {
     # Who matters -------------------------------------------------------------------------
@@ -344,6 +349,22 @@ def show(category: str | None = None) -> None:
         print(f'{name:<{width}}  [{CATEGORIES[name]}] {QUERIES[name][0]}')
 
 
+# Every catalogue parameter is text, including apple_id, which looks like a number but is stored as a string.
+TEXT_PARAMETERS = {'app', 'apple_id', 'date', 'domain', 'month', 'person', 'place'}
+
+
+def parameter_value(key: str, text: str):
+    """A --param value: text for the catalogue's text parameters, otherwise numbers stay numbers."""
+    if key in TEXT_PARAMETERS:
+        return text
+    for kind in (int, float):
+        try:
+            return kind(text)
+        except ValueError:
+            pass
+    return text
+
+
 def parameters(name: str) -> list[str]:
     """The $parameters a catalogue query expects."""
     return sorted(set(re.findall(r'\$([A-Za-z_][A-Za-z0-9_]*)', QUERIES[name][1])))
@@ -378,3 +399,171 @@ def run(db, name: str, **values):
     if values:
         return db.query(cypher(name), values)
     return db.query(cypher(name))
+
+
+# Result tables ----------------------------------------------------------------------------------
+TIMESTAMP = re.compile(r'(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?')
+
+
+def _missing(value) -> bool:
+    return value is None or (isinstance(value, float) and value != value) or type(value).__name__ in ('NAType', 'NaTType')
+
+
+def _is_bool(value) -> bool:
+    return isinstance(value, bool) or type(value).__name__ in ('bool_', 'bool')  # numpy 1 and 2
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, numbers.Number) and not _is_bool(value)
+
+
+def cell(value) -> str:
+    """One value as table text: thousands separators, two decimals, short UTC timestamps, joined lists."""
+    if _missing(value):
+        return ''
+    if _is_bool(value):
+        return 'true' if value else 'false'
+    if isinstance(value, numbers.Integral):
+        return f'{int(value):,}'
+    if isinstance(value, numbers.Real):
+        return f'{value:,.0f}' if float(value).is_integer() else f'{value:,.2f}'
+    if isinstance(value, (list, tuple)):
+        return ', '.join(cell(item) for item in value)
+    text = ' '.join(str(value).split())
+    match = TIMESTAMP.fullmatch(text)
+    if match:
+        date, time, zone = match.groups()
+        return f"{date} {time}{' UTC' if zone in ('Z', '+00:00') else f' {zone}' if zone else ''}"
+    return text
+
+
+def display_width(text: str) -> int:
+    """Terminal columns: wide characters and most emoji take two, combining marks none."""
+    return sum(0 if unicodedata.combining(ch) or ch in '‍️' else 2 if unicodedata.east_asian_width(ch) in 'WF' else 1
+               for ch in text)
+
+
+def clip(text: str, width: int) -> str:
+    if display_width(text) <= width:
+        return text
+    out, used = [], 0
+    for ch in text:
+        size = display_width(ch)
+        if used + size > width - 1:
+            break
+        out.append(ch)
+        used += size
+    return ''.join(out) + '…'
+
+
+def table(df, total: int | None = None, width: int | None = None, bold: bool | None = None) -> str:
+    """A DataFrame as a box-drawn table that fits the terminal, numbers right-aligned.
+
+    ``total`` is the row count before the frame was cut down, for the footer.
+    """
+    width = width or shutil.get_terminal_size((120, 24)).columns
+    bold = sys.stdout.isatty() if bold is None else bold
+    headers = [str(column) for column in df.columns]
+    rows = [[cell(value) for value in record] for record in df.itertuples(index=False, name=None)]
+    numeric = []
+    for column in df.columns:
+        present = [value for value in df[column] if not _missing(value)]
+        numeric.append(bool(present) and all(_is_number(value) for value in present))
+    widths = [max([display_width(h), *(display_width(r[i]) for r in rows)]) for i, h in enumerate(headers)]
+    budget = max(width - 3 * len(widths) - 1, 4 * len(widths))
+    widths = [min(w, budget) for w in widths]
+    while sum(widths) > budget and max(widths) > 4:
+        widest = widths.index(max(widths))
+        widths[widest] -= max(1, (sum(widths) - budget) // 4)
+        widths[widest] = max(widths[widest], 4)
+
+    def line(left, middle, right):
+        return left + middle.join('─' * (w + 2) for w in widths) + right
+
+    def row(values, header=False):
+        cells = []
+        for value, w, right in zip(values, widths, numeric):
+            text = clip(value, w)
+            pad = ' ' * (w - display_width(text))
+            if header and bold:
+                text = f'\033[1m{text}\033[0m'
+            cells.append(pad + text if right else text + pad)
+        return '│ ' + ' │ '.join(cells) + ' │'
+    out = [line('┌', '┬', '┐'), row(headers, header=True), line('├', '┼', '┤'), *(row(r) for r in rows), line('└', '┴', '┘')]
+    total = len(rows) if total is None else total
+    if total == len(rows):
+        out.append('no rows' if total == 0 else '1 row' if total == 1 else f'{total:,} rows')
+    else:
+        out.append(f'{len(rows):,} of {total:,} rows')
+    return '\n'.join(out)
+
+
+def _variables(cypher_text: str) -> tuple[set[str], set[str], set[str]]:
+    """Path, relationship and node variables bound in a query's patterns."""
+    # A pattern's "(" or "[" never directly follows a name, which tells nodes apart from calls like count(d).
+    paths = set(re.findall(r'(?<![\w.])([A-Za-z_]\w*)\s*=\s*\(', cypher_text))
+    relationships = set(re.findall(r'(?<![\w)\]])\[\s*([A-Za-z_]\w*)', cypher_text))
+    nodes = set(re.findall(r'(?<![\w.])\(\s*([A-Za-z_]\w*)\s*[:){]', cypher_text))
+    return paths, relationships, nodes
+
+
+def readable(db, cypher_text: str, df):
+    """Replace returned nodes, relationships and paths, which arrive as internal ids, with names.
+
+    Nodes show their name, relationships their type, and paths read like
+    ``Me ─CALLS_WITH→ Alice ←APPEARS_WITH─ Bob``.
+    """
+    paths, relationships, nodes = _variables(cypher_text)
+    kinds = {}
+    for column in df.columns:
+        if column in paths:
+            kinds[column] = 'path'
+        elif column in relationships:
+            kinds[column] = 'relationship'
+        elif column in nodes:
+            kinds[column] = 'node'
+    if not kinds or df.empty:
+        return df
+    node_ids, edge_ids = set(), set()
+    for column, kind in kinds.items():
+        for value in df[column]:
+            if kind == 'path' and isinstance(value, (list, tuple)):
+                node_ids.update(int(v) for v in value[0::2])
+                edge_ids.update(int(v) for v in value[1::2])
+            elif isinstance(value, numbers.Integral) and not _is_bool(value):
+                (node_ids if kind == 'node' else edge_ids).add(int(value))
+    names, edges = {}, {}
+    if node_ids:
+        found = db.query('MATCH (n) WHERE id(n) IN $ids RETURN id(n) AS id, n.name AS name', {'ids': sorted(node_ids)})
+        names = {int(i): name for i, name in found.itertuples(index=False, name=None)}
+    if edge_ids:
+        found = db.query('MATCH (a)-[r]->(b) WHERE id(r) IN $ids RETURN id(r) AS id, type(r) AS type, id(a) AS a, id(b) AS b',
+                         {'ids': sorted(edge_ids)})
+        edges = {int(i): (kind, int(a), int(b)) for i, kind, a, b in found.itertuples(index=False, name=None)}
+
+    def node_name(i):
+        return str(names.get(int(i), f'#{i}'))
+
+    def path_text(ids):
+        parts = [node_name(ids[0])]
+        for position in range(1, len(ids) - 1, 2):
+            kind, start, _ = edges.get(int(ids[position]), ('?', None, None))
+            parts.append(f'─{kind}→' if start == int(ids[position - 1]) else f'←{kind}─')
+            parts.append(node_name(ids[position + 1]))
+        return ' '.join(parts)
+    df = df.copy()
+    for column, kind in kinds.items():
+        if kind == 'path':
+            df[column] = [path_text(v) if isinstance(v, (list, tuple)) and v else v for v in df[column]]
+        elif kind == 'node':
+            df[column] = [node_name(v) if isinstance(v, numbers.Integral) and not _is_bool(v) else v for v in df[column]]
+        else:
+            df[column] = [edges.get(int(v), ('?',))[0] if isinstance(v, numbers.Integral) and not _is_bool(v) else v for v in df[column]]
+    return df
+
+
+def report(db, name: str, rows: int | None = 50, width: int | None = None, **values) -> str:
+    """Run a catalogue query and lay out the first ``rows`` results (all if 0 or None) as a table."""
+    df = run(db, name, **values)
+    shown = df.head(rows) if rows else df
+    return table(readable(db, cypher(name), shown), total=len(df), width=width)

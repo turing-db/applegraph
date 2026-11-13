@@ -5,13 +5,15 @@ import argparse
 import base64
 import hashlib
 from collections import Counter, defaultdict
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import timedelta
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sqlite3
+import sys
 import tempfile
 
 from .biome import add_biome
@@ -24,6 +26,7 @@ from .safari import add_safari
 
 DEFAULT_SOURCE = Path.home() / 'Library/IntelligencePlatform'
 DEFAULT_TARGET = Path(__file__).resolve().parents[2] / '.apple-graph'
+DEFAULT_PORT = 16666  # The server port the README starts.
 DEFAULT_KNOWLEDGE = Path.home() / 'Library/Application Support/Knowledge/knowledgeC.db'
 DEFAULT_PATHS = {
     'knowledge': DEFAULT_KNOWLEDGE,
@@ -556,6 +559,34 @@ def open_db(target: Path, port: int | None = None):
     return TuringDB(type="embedded", data_dir=str(target.resolve()))
 
 
+@contextmanager
+def quiet_stdout():
+    """Silence the embedded engine, which logs to the process's stdout, so result tables stay clean."""
+    sys.stdout.flush()
+    saved, null = os.dup(1), os.open(os.devnull, os.O_WRONLY)
+    os.dup2(null, 1)
+    try:
+        yield
+    finally:
+        os.dup2(saved, 1)
+        os.close(saved)
+        os.close(null)
+
+
+def open_for_queries(target: Path, port: int | None):
+    """The --port server if given; else an embedded engine, or the server on the default port if one holds the folder."""
+    if port is not None:
+        return open_db(target, port)
+    try:
+        with quiet_stdout():
+            return open_db(target)
+    except Exception as exc:
+        if 'Already locked' not in str(exc):
+            raise
+    print(f'A TuringDB server holds {target}; querying it on port {DEFAULT_PORT} (use --port for another).', file=sys.stderr)
+    return open_db(target, DEFAULT_PORT)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-dir', type=Path, default=DEFAULT_TARGET)
@@ -578,11 +609,13 @@ def main() -> None:
     commands.add_parser('verify', help='Compare persisted graph counts against the JSONL export')
     query = commands.add_parser('query', help='Run Cypher on the imported graph')
     query.add_argument('cypher')
-    catalogue = commands.add_parser('queries', help='List catalogue queries, or print one on a single line')
-    catalogue.add_argument('name', nargs='?', help='Print this query as one pasteable line')
+    catalogue = commands.add_parser('queries', help='List catalogue queries, or run one and print its results')
+    catalogue.add_argument('name', nargs='?', help='Print this query as one pasteable line, then run it and show the results')
+    catalogue.add_argument('--rows', type=int, default=50, metavar='N', help='Show at most N result rows; 0 shows all (default: 50)')
+    catalogue.add_argument('--no-run', action='store_true', help='Only print the pasteable line, without running the query')
     catalogue.add_argument('--category', choices=('insight', 'inference', 'visual'))
     catalogue.add_argument('--param', action='append', default=[], metavar='KEY=VALUE',
-                           help='Fill a $parameter (repeatable); numbers stay numbers')
+                           help='Fill a $parameter (repeatable)')
     face = commands.add_parser('faces', help='List the photos behind a face cluster and optionally reveal them in Photos')
     face.add_argument('identifier', help='apple_id (as shown on person nodes) or Photos person UUID')
     face.add_argument('--library', type=Path, default=faces.DEFAULT_LIBRARY)
@@ -607,17 +640,24 @@ def main() -> None:
                 key, sep, value = item.partition('=')
                 if not sep:
                     parser.error(f'--param expects KEY=VALUE, got {item!r}')
-                try:
-                    values[key] = int(value)
-                except ValueError:
-                    try:
-                        values[key] = float(value)
-                    except ValueError:
-                        values[key] = value
+                values[key] = queries.parameter_value(key, value)
             try:
                 print(queries.one_line(args.name, **values))
             except KeyError as error:
                 parser.error(error.args[0])
+            if args.no_run:
+                return
+            db = open_for_queries(target, args.port)
+            with quiet_stdout():
+                db.load_graph(args.graph, raise_if_loaded=False)
+                db.set_graph(args.graph)
+                found = queries.run(db, args.name, **values)
+                shown = found.head(args.rows) if args.rows > 0 else found
+                result = queries.table(queries.readable(db, queries.cypher(args.name), shown), total=len(found))
+            print(f'\n{queries.QUERIES[args.name][0]} · graph {args.graph}')
+            print(result)
+            if len(shown) < len(found):
+                print('Pass --rows 0 to see them all.')
             return
         if args.command == 'faces':
             faces.main(args)
@@ -675,4 +715,8 @@ def main() -> None:
             else:
                 print(db.query(args.cypher).to_string(index=False))
     except (OSError, sqlite3.Error, ValueError, RuntimeError) as exc:
+        parser.exit(1, f'Error: {exc}\n')
+    except Exception as exc:
+        if type(exc).__name__ != 'TuringDBException':
+            raise
         parser.exit(1, f'Error: {exc}\n')
