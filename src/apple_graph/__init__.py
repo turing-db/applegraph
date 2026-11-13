@@ -26,7 +26,6 @@ from .safari import add_safari
 
 DEFAULT_SOURCE = Path.home() / 'Library/IntelligencePlatform'
 DEFAULT_TARGET = Path(__file__).resolve().parents[2] / '.apple-graph'
-DEFAULT_PORT = 16666  # The server port the README starts.
 DEFAULT_KNOWLEDGE = Path.home() / 'Library/Application Support/Knowledge/knowledgeC.db'
 DEFAULT_PATHS = {
     'knowledge': DEFAULT_KNOWLEDGE,
@@ -557,6 +556,9 @@ def open_db(target: Path, port: int | None = None):
         return TuringDB(type="native", host="127.0.0.1", port=port)
     target.mkdir(parents=True, exist_ok=True, mode=0o700)
     return TuringDB(type="embedded", data_dir=str(target.resolve()))
+
+
+DEFAULT_PORT = 16666  # The server port the README starts.
 
 
 @contextmanager
