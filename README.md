@@ -165,6 +165,28 @@ Then start the server again as in step 5.
 
 To remove everything, stop the server and delete the `.apple-graph/` folder.
 
+## Try it on a sample person
+
+To demo the graph without anyone's real data, generate a fictional Mac and import it like a real one. It works on any machine and needs no Full Disk Access:
+
+```sh
+uv run apple-graph sample                          # writes .apple-graph/sample-home/
+uv run apple-graph --graph oliver import --entities-only --home .apple-graph/sample-home
+```
+
+Start the server as in step 5 with `-load oliver`, and select **oliver** in the visualizer.
+
+The Mac belongs to Oliver Dunmore, 34, co-founder and CEO of Tallyhand, a London start-up that sells AI agents for reconciling invoices. He lives in Shoreditch with his fiancée Sophie, plays padel on Tuesdays and Thursdays, listens to Coldplay and reads Hacker News. He is very boring, mostly. Every source has a schema-accurate fake: the knowledge graph, knowledgeC, Biome, Safari, Contacts, Mail and Photos. All of it is invented and generated from a fixed seed, and phone numbers come from Ofcom's ranges reserved for drama.
+
+No single source gives him away. The catalogue queries `calls_not_texts`, `home_from_photos`, `unnamed_faces`, `relationship_soundtrack`, `chat_only_people`, `bluetooth_routine`, `mail_triangles` and `new_obsessions` each turn up one odd detail. `day_reconstruction` with `date=2026-11-07` puts several of them on one day. With a full import (without `--entities-only`), the expired knowledge-graph rows in the archive hold one more.
+
+<details>
+<summary>Spoiler</summary>
+
+Every other Friday Oliver's calendar says "Padel tournament (away) — Bristol". He takes the 17:30 from Paddington, a Volvo connects to his phone at Temple Meads, and his iPhone plays Baby Shark all weekend. "Padel Club Bookings" in his contacts is a mobile number he calls for 85 hours over six months. It belongs to a parents' WhatsApp group at a Clifton nursery, and Apple's archive remembers it was saved as "Katie 💛" until March 2024. Photos has two unnamed faces he appears with hundreds of times, plus a baby born the week of his "padel training camp". Meanwhile Sophie is planning their wedding, he is emailing a family solicitor about parental responsibility, and he spends his evenings on Bristol's school admissions pages.
+
+</details>
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -179,7 +201,7 @@ To remove everything, stop the server and delete the `.apple-graph/` folder.
 | Few people have real names | That's how Apple stores it. Name them as in step 7. |
 | Message counts look low | Biome only keeps recent history, and only for devices signed into the same Apple Account with iCloud sync on. |
 
-All source locations can be overridden on `import` with `--knowledge`, `--safari`, `--contacts`, `--mail`, `--photos`, `--biome` and `--source`. Run `uv run apple-graph import --help` for the full list.
+All source locations can be overridden on `import` with `--knowledge`, `--safari`, `--contacts`, `--mail`, `--photos`, `--biome` and `--source`, or all at once with `--home DIR` for a folder laid out like a home folder. Run `uv run apple-graph import --help` for the full list.
 
 ## Privacy
 
@@ -294,6 +316,6 @@ Node and edge counts are checked after import. `verify` compares counts, every a
 uv run python -m unittest discover -s tests -v
 ```
 
-`tests/test_import.py` covers the Apple graph and knowledgeC mapping; `tests/test_sources.py` builds synthetic Safari, AddressBook, Mail, Photos and SEGB fixtures for the other importers.
+`tests/test_import.py` covers the Apple graph and knowledgeC mapping; `tests/test_sources.py` builds synthetic Safari, AddressBook, Mail, Photos and SEGB fixtures for the other importers; `tests/test_sample.py` imports the sample Mac end to end and checks that its story still holds.
 
 TuringDB JSONL format: https://docs.turingdb.ai/import_data/jsonl

@@ -10,6 +10,16 @@ import sqlite3
 
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
 UNIX_TO_APPLE = 978307200
+# Where each source lives relative to a home folder (a real one, or one written by ``apple-graph sample``).
+HOME_LAYOUT = {
+    'source': 'Library/IntelligencePlatform',
+    'knowledge': 'Library/Application Support/Knowledge/knowledgeC.db',
+    'safari': 'Library/Safari/History.db',
+    'contacts': 'Library/Application Support/AddressBook/AddressBook-v22.abcddb',
+    'mail': 'Library/Mail/V10/MailData/Envelope Index',
+    'photos': 'Pictures/Photos Library.photoslibrary/database/Photos.sqlite',
+    'biome': 'Library/Biome/streams/restricted',
+}
 
 
 def snapshot(source: Path, destination: Path) -> None:
