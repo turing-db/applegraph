@@ -18,21 +18,14 @@ from .biome import add_biome
 from .contacts import add_contacts
 from . import faces
 from .mail import add_mail
-from .model import APPLE_EPOCH, Builder, apple_time, local_day, snapshot, split_days, union_seconds
+from .model import APPLE_EPOCH, HOME_LAYOUT, Builder, apple_time, local_day, snapshot, split_days, union_seconds
 from .photos import add_photos
 from .safari import add_safari
 
-DEFAULT_SOURCE = Path.home() / 'Library/IntelligencePlatform'
+DEFAULT_SOURCE = Path.home() / HOME_LAYOUT['source']
 DEFAULT_TARGET = Path(__file__).resolve().parents[2] / '.apple-graph'
-DEFAULT_KNOWLEDGE = Path.home() / 'Library/Application Support/Knowledge/knowledgeC.db'
-DEFAULT_PATHS = {
-    'knowledge': DEFAULT_KNOWLEDGE,
-    'safari': Path.home() / 'Library/Safari/History.db',
-    'contacts': Path.home() / 'Library/Application Support/AddressBook/AddressBook-v22.abcddb',
-    'mail': Path.home() / 'Library/Mail/V10/MailData/Envelope Index',
-    'photos': Path.home() / 'Pictures/Photos Library.photoslibrary/database/Photos.sqlite',
-    'biome': Path.home() / 'Library/Biome/streams/restricted',
-}
+DEFAULT_KNOWLEDGE = Path.home() / HOME_LAYOUT['knowledge']
+DEFAULT_PATHS = {name: Path.home() / HOME_LAYOUT[name] for name in ('knowledge', 'safari', 'contacts', 'mail', 'photos', 'biome')}
 ACTIVE_TABLES = ('stable_graph', 'event_graph')
 TABLE_PRIORITY = {'stable_graph': 0, 'event_graph': 1}
 FACT_COLUMNS = {'subject', 'predicate', 'relationshipId', 'relationshipPredicate', 'object'}
@@ -563,13 +556,15 @@ def main() -> None:
     parser.add_argument('--port', type=int, help='Use an existing local TuringDB server instead of embedded mode')
     commands = parser.add_subparsers(dest='command', required=True)
     imp = commands.add_parser('import', help='Snapshot Apple SQLite and import a new TuringDB graph')
-    imp.add_argument('--source', type=Path, default=DEFAULT_SOURCE)
+    imp.add_argument('--home', type=Path, default=Path.home(), metavar='DIR',
+                     help='Read every source from this folder instead of your home folder, for example one written by "sample"')
+    imp.add_argument('--source', type=Path, help=f'Apple knowledge graph folder (default: <home>/{HOME_LAYOUT["source"]})')
     imp.add_argument('--export-only', action='store_true')
     imp.add_argument('--entities-only', action='store_true',
                      help='Skip the SQLite row archive and ontology; keep only entities and their edges')
-    for name, default in DEFAULT_PATHS.items():
-        imp.add_argument(f'--{name}', type=Path, default=default, metavar='PATH',
-                         help=f'Path of the {name} source (skipped if missing)')
+    for name in DEFAULT_PATHS:
+        imp.add_argument(f'--{name}', type=Path, metavar='PATH',
+                         help=f'Path of the {name} source, skipped if missing (default: <home>/{HOME_LAYOUT[name]})')
     imp.add_argument('--skip', action='append', default=[], choices=sorted(DEFAULT_PATHS), metavar='SOURCE',
                      help='Leave out one of: ' + ', '.join(sorted(DEFAULT_PATHS)) + ' (repeatable)')
     imp.add_argument('--no-knowledge', action='store_true', help=argparse.SUPPRESS)
@@ -590,6 +585,8 @@ def main() -> None:
     face.add_argument('--limit', type=int, default=12)
     face.add_argument('--reveal', type=int, nargs='?', const=1, default=0, metavar='N', help='Select the first N photos in the Photos app')
     face.add_argument('--open', type=int, nargs='?', const=4, default=0, metavar='N', help='Open up to N locally stored originals')
+    demo = commands.add_parser('sample', help='Write a fictional Mac to import instead of your own (Oliver, 34, London)')
+    demo.add_argument('home', nargs='?', type=Path, help='Folder to write it to (default: <data-dir>/sample-home)')
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', args.graph):
         parser.error('--graph must be a simple identifier')
@@ -622,6 +619,13 @@ def main() -> None:
         if args.command == 'faces':
             faces.main(args)
             return
+        if args.command == 'sample':
+            from . import sample
+            home = (args.home or target / 'sample-home').expanduser().resolve()
+            stats = sample.build(home)
+            print(json.dumps(dict(home=str(home), **stats), indent=2))
+            print(f'\nImport it with:\n  uv run apple-graph --graph oliver import --entities-only --home "{home}"')
+            return
         if args.command == 'import':
             target.mkdir(parents=True, exist_ok=True, mode=0o700)
             db = None if args.export_only else open_db(target, args.port)
@@ -631,8 +635,9 @@ def main() -> None:
                     raise ValueError('Graph already exists; use a new --graph name for a fresh snapshot.')
             output = target / 'data' / f'{args.graph}.jsonl'
             skipped = set(args.skip) | ({'knowledge'} if args.no_knowledge else set())
-            paths = {name: getattr(args, name).expanduser() for name in DEFAULT_PATHS if name not in skipped}
-            stats = export_graph(args.source.expanduser(), output, entities_only=args.entities_only,
+            home = args.home.expanduser()
+            paths = {name: (getattr(args, name) or home / HOME_LAYOUT[name]).expanduser() for name in DEFAULT_PATHS if name not in skipped}
+            stats = export_graph((args.source or home / HOME_LAYOUT['source']).expanduser(), output, entities_only=args.entities_only,
                                  knowledge=paths.pop('knowledge', None), sources=paths,
                                  name_overrides=(args.names.expanduser() if args.names else target / 'names.json'))
             if db is not None:
