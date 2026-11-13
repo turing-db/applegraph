@@ -180,6 +180,13 @@ The Mac belongs to Oliver Dunmore, 34, co-founder and CEO of Tallyhand, a London
 
 No single source gives him away. The catalogue queries `calls_not_texts`, `home_from_photos`, `unnamed_faces`, `relationship_soundtrack`, `chat_only_people`, `bluetooth_routine`, `mail_triangles` and `new_obsessions` each turn up one odd detail. `day_reconstruction` with `date=2026-11-07` puts several of them on one day. With a full import (without `--entities-only`), the expired knowledge-graph rows in the archive hold one more.
 
+<details>
+<summary>Spoiler</summary>
+
+Every other Friday Oliver's calendar says "Padel tournament (away) — Bristol". He takes the 17:30 from Paddington, a Volvo connects to his phone at Temple Meads, and his iPhone plays Baby Shark all weekend. "Padel Club Bookings" in his contacts is a mobile number he calls for 85 hours over six months. It belongs to a parents' WhatsApp group at a Clifton nursery, and Apple's archive remembers it was saved as "Katie 💛" until March 2024. Photos has two unnamed faces he appears with hundreds of times, plus a baby born the week of his "padel training camp". Meanwhile Sophie is planning their wedding, he is emailing a family solicitor about parental responsibility, and he spends his evenings on Bristol's school admissions pages.
+
+</details>
+
 ## Troubleshooting
 
 | Symptom | Fix |
