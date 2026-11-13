@@ -80,6 +80,37 @@ class CatalogueTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             queries.one_line('trip')
 
+    def test_parameters_stay_text(self):
+        self.assertEqual(queries.parameter_value('apple_id', '405112233446597927'), '405112233446597927')
+        self.assertEqual(queries.parameter_value('month', '2026-10'), '2026-10')
+        self.assertEqual((queries.parameter_value('limit', '5'), queries.parameter_value('ratio', '.5')), (5, .5))
+
+    def test_pattern_variables(self):
+        paths, relationships, nodes = queries._variables(queries.cypher('naggy_apps'))
+        self.assertEqual((paths, relationships), (set(), {'n', 'u'}))
+        self.assertNotIn('pings', nodes)  # toFloat(pings) is a call, not a node pattern.
+        self.assertEqual(queries._variables(queries.cypher('social_star'))[0], {'p'})
+        paths, relationships, nodes = queries._variables(queries.cypher('month_picture'))
+        self.assertEqual(({'r'} <= relationships, {'d', 'x'} <= nodes), (True, True))
+
+    def test_table_layout(self):
+        import pandas as pd
+        df = pd.DataFrame({'name': ['Padel Boys 🎾', 'Alice'], 'calls': pd.array([1234, None], dtype='Int64'),
+                           'ratio': [0.206181, 68.0], 'flag': [True, False], 'names': [['a', 'b'], []],
+                           'when': ['2026-11-12T09:00:00.25+00:00', '2026-11-12']})
+        text = queries.table(df, total=5, width=200, bold=False)
+        lines = text.splitlines()
+        self.assertEqual(lines[1].split('│')[1:-1], [' name          ', ' calls ', ' ratio ', ' flag  ', ' names ', ' when                 '])
+        self.assertIn('│ Padel Boys 🎾 │ 1,234 │  0.21 │ true  │ a, b  │ 2026-11-12 09:00 UTC │', lines)
+        self.assertIn('│ Alice         │       │    68 │ false │       │ 2026-11-12           │', lines)
+        self.assertEqual(lines[-1], '2 of 5 rows')
+        self.assertEqual(len({queries.display_width(line) for line in lines[:-1]}), 1)
+        narrow = queries.table(df, width=50, bold=False).splitlines()
+        self.assertTrue(all(queries.display_width(line) <= 50 for line in narrow))
+        self.assertIn('…', ''.join(narrow))
+        self.assertEqual(narrow[-1], '2 rows')
+        self.assertEqual(queries.table(df.head(0), bold=False).splitlines()[-1], 'no rows')
+
     def test_every_query_runs(self):
         from turingdb import TuringDB
         builder = synthetic_graph()
@@ -100,6 +131,13 @@ class CatalogueTest(unittest.TestCase):
                     self.assertEqual(len(db.query(queries.one_line(name, **values))), rows)
                     if rows == 0:
                         empty.add(name)
+            # Paths, nodes and relationships come back as ids; tables show them by name.
+            star = queries.report(db, 'social_star', rows=0)
+            self.assertIn('│ Me ─MESSAGES_WITH→ Alice ', star)
+            self.assertIn('│ Me ─APPEARS_WITH→ Alice ', star)
+            month = queries.report(db, 'month_picture', rows=3, width=100, month='2025-12')
+            self.assertRegex(month, r'│ 2025-12-\d\d │ [A-Z_]+ +│ [A-Za-z]')  # Day, relationship type, person name.
+            self.assertTrue(month.endswith(' rows') and ' of ' in month.splitlines()[-1])
             # These exclude people you already talk to, and the fixture talks to everyone.
             self.assertEqual(empty, {'unused_apps', 'photo_friends_of_friends', 'calls_not_texts',
                                      'chat_only_people', 'friends_of_friends'})

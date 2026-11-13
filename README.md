@@ -94,13 +94,27 @@ kill $(lsof -tnP -iTCP:16666 -sTCP:LISTEN)
 
 ### 6. Explore
 
-The project ships 61 ready-made queries. List them and print any one as a single line to paste into the visualizer:
+The project ships 61 ready-made queries. List them, or run one by name. Running one prints the query as a single line you can paste into the visualizer, then its results as a table:
 
 ```sh
 uv run apple-graph queries
 uv run apple-graph queries --category visual
-uv run apple-graph queries trip --param place=Paris
+uv run apple-graph queries calls_not_texts
+uv run apple-graph queries trip --param place=Paris --rows 20
 ```
+
+```
+People you call but never message · graph apple_life
+┌───────────────┬─────────┬────────────┬────────────┬─────────┐
+│ p.name        │ c.calls │ c.incoming │ c.outgoing │ minutes │
+├───────────────┼─────────┼────────────┼────────────┼─────────┤
+│ Alex          │      42 │         19 │         23 │     318 │
+│ +441174960832 │       3 │          3 │          0 │       7 │
+└───────────────┴─────────┴────────────┴────────────┴─────────┘
+2 rows
+```
+
+Nodes and paths are shown by name, for example `Me ─CALLS_WITH→ Alex`. The table shows the first 50 rows (`--rows 0` shows all) and fits the terminal width. It uses the server from step 5 when that server holds the data folder, and otherwise opens the graph directly. `--no-run` prints only the pasteable line.
 
 Or query from Python. Start a shell with `uv run python` and run:
 
@@ -187,21 +201,23 @@ The default sources are read under `~/Library` and `~/Pictures`. SQLite sources 
 - **inference**: what Apple can infer by joining sources, such as sleep times, lonely days, drifting friendships, home from photos and your Siri action ledger.
 - **visual**: queries that return whole paths, sized for the visualizer, such as your social star, group chats as hubs and trips.
 
-From the shell, list them or print one as a single line, with `$parameters` filled in, ready to paste into the visualizer:
+From the shell, list them, or run one: it prints the query as a single line with `$parameters` filled in, ready to paste into the visualizer, then the results as a table:
 
 ```sh
 uv run apple-graph queries                                  # every query
 uv run apple-graph queries --category visual
-uv run apple-graph queries trip --param place=Paris     # one pasteable line
+uv run apple-graph queries trip --param place=Paris          # pasteable line, then results
+uv run apple-graph queries trip --param place=Paris --no-run # pasteable line only
 ```
 
 From Python, against the running server:
 
 ```python
-from apple_graph.queries import connect, run, show, one_line
+from apple_graph.queries import connect, run, show, one_line, report
 db = connect()                       # 127.0.0.1:16666, graph apple_life
 show('inference')
 run(db, 'sleep_schedule')
+print(report(db, 'social_star'))     # the same table the shell prints
 run(db, 'day_reconstruction', date='2025-12-24')
 print(one_line('person', person='Face cluster 12'))
 ```
