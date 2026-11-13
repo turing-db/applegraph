@@ -26,7 +26,7 @@ Everything stays on your Mac. The importer never contacts a network service, and
 
 The other sources are optional. If you don't use Mail or Photos on this Mac, those parts are skipped.
 
-### 2. Install uv and get the project
+### 2. Install uv
 
 [uv](https://docs.astral.sh/uv/) manages Python and the dependencies. It downloads Python 3.14 for you, so you don't need to install Python yourself.
 
@@ -37,7 +37,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh     # or: brew install uv
 Open a new terminal window afterwards so `uv` is on your PATH. Then copy or clone this project folder and install it:
 
 ```sh
-cd apple-graph            # wherever you put the project
+git clone git@github.com:turing-db/appleintelligence.git
+cd appleintelligence
 uv sync --locked
 ```
 
