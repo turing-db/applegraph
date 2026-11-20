@@ -78,7 +78,7 @@ To leave a source out, add `--skip`, for example `--skip mail --skip photos`. To
 uv run turingdb -turing-dir "$PWD/.apple-graph" -load apple_life -p 16666 -i 127.0.0.1 -ui -ui-port 18080 -demon
 ```
 
-Run it from the project folder. The server keeps running in the background. Then open http://127.0.0.1:18080 and select **apple_life** in the graph picker. The server also loads an empty graph called `default`, and queries against that one return nothing.
+Then open http://127.0.0.1:18080 and select **apple_life** in the graph picker.
 
 A good first query to paste into the visualizer:
 
@@ -96,7 +96,7 @@ kill $(lsof -tnP -iTCP:16666 -sTCP:LISTEN)
 
 ### 6. Explore
 
-The project ships 61 ready-made queries. List them, or run one by name. Running one prints the query as a single line you can paste into the visualizer, then its results as a table:
+The project ships 61 ready-made queries. List them, or run one by name.
 
 ```sh
 uv run apple-graph queries
@@ -115,8 +115,6 @@ People you call but never message · graph apple_life
 └───────────────┴─────────┴────────────┴────────────┴─────────┘
 2 rows
 ```
-
-Nodes and paths are shown by name, for example `Me ─CALLS_WITH→ Alex`. The table shows the first 50 rows (`--rows 0` shows all) and fits the terminal width. It uses the server from step 5 when that server holds the data folder, and otherwise opens the graph directly. `--no-run` prints only the pasteable line.
 
 Or query from Python. Start a shell with `uv run python` and run:
 
@@ -148,8 +146,6 @@ The first time, macOS asks whether your terminal may control Photos. Then either
 Names apply on the next import, so refresh as described below.
 
 ### 8. Refresh with newer data
-
-TuringDB 3.1 cannot delete or overwrite a graph, so either import under a new name:
 
 ```sh
 uv run apple-graph --graph apple_life_2 import --entities-only
