@@ -2,6 +2,10 @@
 
 Your Mac quietly keeps a detailed record of your life: who you message and call, which apps you use and when, what you browse, what you listen to, who appears in your photos and where. Apple Graph reads those on-device stores and loads them into [TuringDB](https://docs.turingdb.ai) as one connected graph that you can query and explore visually.
 
+<p align="center">
+<img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/0ca8d6bf-8f40-4490-8ad4-657f73347627" />
+</p>
+
 It reads these sources:
 
 | Source | What it adds |
@@ -28,8 +32,6 @@ The other sources are optional. If you don't use Mail or Photos on this Mac, tho
 
 ### 2. Install uv
 
-[uv](https://docs.astral.sh/uv/) manages Python and the dependencies. It downloads Python 3.14 for you, so you don't need to install Python yourself.
-
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | sh     # or: brew install uv
 ```
@@ -37,8 +39,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh     # or: brew install uv
 Open a new terminal window afterwards so `uv` is on your PATH. Then copy or clone this project folder and install it:
 
 ```sh
-git clone git@github.com:turing-db/appleintelligence.git
-cd appleintelligence
+git clone git@github.com:turing-db/applegraph.git
+cd applegraph
 uv sync --locked
 ```
 
